@@ -1,0 +1,1786 @@
+; to do :
+; - backface culling
+; - textures
+
+   #include "ti83pce.inc"
+
+varA equ $D00000
+varB equ $D00003
+varC equ $D00006
+varD equ $D00100
+varY equ $D00103
+
+x0 equ $D00009
+x1 equ $D0000C
+y0 equ $D0000F
+y1 equ $D00012
+dx equ $D00015
+dy equ $D00018
+yi equ $D0001B
+xi equ $D0001E
+signdx equ $D00021
+signdy equ $D00024
+DO equ $D00027
+y equ $D0002A
+x equ $D0002D
+signx equ $D00030
+signy equ $D00033
+signz equ $D00036
+
+screenAdress equ $D00039
+nblien equ $D0003C
+nblieninit equ $D0003F
+nbvertices equ $D00042
+nbverticesinit equ $D00045
+color equ $D00048
+object equ $D0004B
+objectlink equ $D0004E
+lineDrawn equ $D00051
+angle equ $D00054
+pointsix equ $D00057
+pointneuf equ $D0005A
+pointsixbis equ $D0005D
+pointsixter equ $D00060
+zi equ $D00063
+
+   .assume ADL=1
+   .db tExtTok,tAsm84CeCmp
+   .org userMem
+
+;;;;;;;;;;;;;;;;;_initialisation_;;;;;;;;;;;;;;;;
+
+;pyramide
+	ld HL, 0
+	ld (object), HL
+	ld (objectlink), HL
+	ld A, 5
+	ld (nbverticesinit), A 	; nombre de vertices 
+	ld A, 8
+	ld (nblieninit), A 		; nombre de liens
+
+;cube
+;	ld A, 8
+;	ld (nbverticesinit), A 	; nombre de vertices cube
+;	ld A, 12
+;	ld (nblieninit), A 		; nombre de liens cube
+;	ld HL, 45
+;	ld (object), HL
+;	ld hl, 16
+;	ld (objectlink), HL
+
+;tube
+;	ld A, 12
+;	ld (nbverticesinit), A 	; nombre de vertices tube
+;	ld A, 18
+;	ld (nblieninit), A 		; nombre de liens tube
+;	ld HL, 117
+;	ld (object), HL
+;	ld hl, 40
+;	ld (objectlink), HL
+
+;3 cubes
+;	ld A, 17
+;	ld (nbverticesinit), A 	; nombre de vertices 3 cubes
+;	ld A, 28
+;	ld (nblieninit), A 		; nombre de liens 3 cubes
+;	ld HL, 225
+;	ld (object), HL
+;	ld hl, 76
+;	ld (objectlink), HL
+
+	ld HL, 3
+	ld (angle), HL ; x pour rota (debug)
+
+	call reloadScreen
+
+	ld A, 1
+	ld (lineDrawn), A
+
+;;;;;;;;;;;;;;;;;;;;;;_loop_;;;;;;;;;;;;;;;;;;;;
+
+loop:
+	ld A, (lineDrawn)
+	cp 1
+	jp z, pasdeligne    ; line drawn à 1 sgnifie pas de ligne à effacer
+
+	ld DE, 0
+	ld (color), DE
+	ld HL, 0
+	ld (nblien), HL
+	call drawlines          ; on efface la figure précedemment dessinée
+	ld DE, %1111100000000000
+	ld (color), DE
+
+pasdeligne:
+	ld A, 0
+	ld (pointsix), A  		; = point (de 6 en 6)
+	ld A, 0
+	ld (pointneuf), A			; = point (de 9 en 9)
+
+	ld HL, (nbverticesinit)
+	ld A, L
+	ld (nbvertices), A 		; nombre de vertices
+	call drawVertices
+
+	ld HL, 0
+	ld (nblien), HL			; nombre de liens
+	call drawlines
+	ld A, 0
+	ld (lineDrawn), A
+
+	call userInput
+	cp A, 0 				; si annul pressée on quitte le programme
+	jp z, exitprogram
+
+	jp loop
+
+exitProgram:
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_reloadScreen_;;;;;;;;;;;;;;;;;;;;;
+
+reloadScreen:
+	call clearscreen
+
+	ld DE, %1111100000000000
+	ld (color), DE
+
+	ld hl, 241
+	ld (x0), HL
+	ld hl, 0
+	ld (y0), HL
+	ld hl, 241
+	ld (x1), HL
+	ld hl, 240
+	ld (y1), HL
+	call plotLine
+
+; cases :
+	ld hl, 241
+	ld (x0), HL
+	ld hl, 47
+	ld (y0), HL
+	ld (y1), HL
+	ld hl, 320
+	ld (x1), HL
+	call plotLine
+
+	ld hl, 241
+	ld (x0), HL
+	ld hl, 95
+	ld (y0), HL
+	ld (y1), HL
+	ld hl, 320
+	ld (x1), HL
+	call plotLine
+
+	ld hl, 241
+	ld (x0), HL
+	ld hl, 144
+	ld (y0), HL
+	ld (y1), HL
+	ld hl, 320
+	ld (x1), HL
+	call plotLine
+
+	ld hl, 241
+	ld (x0), HL
+	ld hl, 192
+	ld (y0), HL
+	ld (y1), HL
+	ld hl, 320
+	ld (x1), HL
+	call plotLine
+; fin cases :
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;_clearscreen_;;;;;;;;;;;;;;;;;;;;;
+
+clearscreen:
+	ld BC, 0
+	ld DE, 0
+
+clearScreenLoop:
+	ld HL, $D40000
+	add HL, BC
+	ld (HL),D
+	inc BC
+	ld HL, 153600
+	sbc HL, BC
+	jp nz, clearScreenLoop
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;_userInput_;;;;;;;;;;;;;;;;;;;;;;
+
+userInput:
+
+scanClavier:
+	di ; On désactive les interruptions (obligatoire)
+	ld hl,$F50000
+	ld (hl),2 ; On met le clavier en mode "un seul scan"
+	xor a,a
+scan_wait:
+	cp a,(hl) ; On attend que le clavier soit retourné en mode repos ce qui voudra dire que la détection des touches est terminée
+	jr nz,scan_wait
+
+	; Quand la détection est terminée, on peut commencer à lire les ports
+	ld a,($F5001E)
+	cp a,8 		; si la touche haut a été pressée...
+	jp z,haut
+	cp a,1 		; si la touche bas a été pressée...
+	jp z,bas
+	cp a,4 		; si la touche droite a été pressée...
+	jp z,droite
+	cp a,2 		; si la touche gauche a été pressée...
+	jp z,gauche
+	ld a,($F5001C)
+	cp a,64 	; si la touche annul a été pressée...
+	jp z,annul
+	ld a,($F50016)
+	cp a,1 		; si la touche 0 a été pressée...
+	jp z,zero
+	cp a,2 		; si la touche 1 a été pressée...
+	jp z,un
+	ld a,($F50018)
+	cp a,2 		; si la touche 2 a été pressée...
+	jp z,deux
+	ld a,($F5001A)
+	cp a,2 		; si la touche 3 a été pressée...
+	jp z,trois
+	jr scanClavier
+
+zero:
+	ld A, 5
+	ld (nbverticesinit), A 	; nombre de vertices pyramide
+	ld A, 8
+	ld (nblieninit), A 		; nombre de liens pyramide
+	ld HL, 0
+	ld (object), HL
+	ld (objectlink), HL
+	call reloadScreen
+	ld A, 1
+	ld (lineDrawn), A
+	ret
+
+un:
+	ld A, 8
+	ld (nbverticesinit), A 	; nombre de vertices cube
+	ld A, 12
+	ld (nblieninit), A 		; nombre de liens cube
+	ld HL, 45
+	ld (object), HL
+	ld hl, 16
+	ld (objectlink), HL
+	call reloadScreen
+	ld A, 1
+	ld (lineDrawn), A
+	ret
+
+deux:
+	ld A, 12
+	ld (nbverticesinit), A 	; nombre de vertices tube
+	ld A, 18
+	ld (nblieninit), A 		; nombre de liens tube
+	ld HL, 117
+	ld (object), HL
+	ld hl, 40
+	ld (objectlink), HL
+	call reloadScreen
+	ld A, 1
+	ld (lineDrawn), A
+	ret
+
+trois:
+	ld A, 17
+	ld (nbverticesinit), A 	; nombre de vertices 3 cubes
+	ld A, 28
+	ld (nblieninit), A 		; nombre de liens 3 cubes
+	ld HL, 225
+	ld (object), HL
+	ld hl, 76
+	ld (objectlink), HL
+	call reloadScreen
+	ld A, 1
+	ld (lineDrawn), A
+	ret
+
+haut:
+	ld HL, 1
+	ld (zi), HL
+	ld A, 0
+	ld (pointneuf), A	; = point (de 9 en 9)
+	ld HL, (nbverticesinit)
+	ld A, L
+	ld (nbvertices), A 	; nombre de vertices
+	call updateY
+	ld A, 1
+	ret
+
+bas:
+	ld HL, -1
+	ld (zi), HL
+	ld A, 0
+	ld (pointneuf), A	; = point (de 9 en 9)
+	ld HL, (nbverticesinit)
+	ld A, L
+	ld (nbvertices), A 	; nombre de vertices
+	call updateY
+	ld A, 1
+	ret
+
+droite:
+	ld HL, (angle) ; X pour cos(x) & sin(x)
+	ld A, L
+	cp 35
+	jp nz, normaldroite
+	ld L, 0
+normaldroite:
+	inc HL
+	ld (angle), HL
+	ld A, 1
+	ret
+
+gauche:
+	ld HL, (angle) ; X pour cos(x) & sin(x)
+	ld A, L
+	cp 0
+	jp nz, normalgauche
+	ld L, 35
+normalgauche:
+	dec HL
+	ld (angle), HL
+	ld A, 1
+	ret
+
+annul:
+	ld A, 0
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;_updateY_;;;;;;;;;;;;;;;;;;;;;;
+
+updateY:
+	ld DE, (pointneuf)
+	ld HL, 9
+	add HL, DE
+	ld (pointneuf), HL
+	ld HL, cube
+	add HL, DE
+	ld DE, (object)
+	add HL, DE
+	ld DE, 3         ; à changer en 6 pour update Z
+	add HL, DE
+	push HL
+	ld BC, (HL)
+	ld HL, (zi)
+	add HL, BC
+	push HL
+	pop BC
+	pop HL
+	ld (HL), BC
+	ld HL, (nbvertices)
+	ld A, L
+	dec HL
+	ld (nbvertices), HL
+	cp 1
+	jp nz, updateY
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;_drawlines_;;;;;;;;;;;;;;;;;;;;;
+
+drawlines:
+; on récupère les liens 
+	ld BC, liens
+	ld HL, (nblien)
+	add HL, HL
+	add HL, BC
+	ld DE, (objectlink)
+	add HL, DE
+	ld DE, 0
+	ld E, (HL)    ; on met le numéro de la premiere vertice dans E
+	ld (pointsixbis), DE
+
+	inc HL
+	ld BC, 0
+	ld C, (HL)    ; on met le numéro de la deuxième vertice dans C
+	ld (pointsixter), BC
+
+
+; on s'occupe de récupérer x0
+	ld HL, 0
+	ld BC, (pointsixbis) ; = point (de 6 en 6)
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	ld DE, cubeDeuxD
+	add HL, DE
+	ld BC, (HL)
+
+; on s'occupe de de récupérer y0
+	inc HL
+	inc HL
+	inc HL
+	ld DE, (HL)
+
+	ld (x0), BC
+	ld (y0), DE
+
+
+
+; on s'occupe de récupérer x1
+	ld HL, 0
+	ld BC, (pointsixter) ; = point (de 6 en 6)
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	add HL, BC
+	ld DE, cubeDeuxD
+	add HL, DE
+	ld BC, (HL)
+
+; on s'occupe de de récupérer y1
+	inc HL
+	inc HL
+	inc HL
+	ld DE, (HL)
+
+	ld (x1), BC
+	ld (y1), DE
+
+	call plotLine
+
+	ld HL, (nblien)
+	inc HL
+	ld (nblien), HL
+	ld A, L
+	ld HL, (nblieninit)
+	cp L ; nombre de liens 
+	jp nz, drawlines
+
+	ret
+
+;;;;;;;;;;;;;;;;;_invertcoordinates_;;;;;;;;;;;;;;;;;
+
+invertcoordinates:
+	ld HL, (x0)
+	ld BC, (x1)
+	ld (x0), BC
+	ld (x1), HL
+
+	ld HL, (y0)
+	ld BC, (y1)
+	ld (y0), BC
+	ld (y1), HL
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;_plotLine_;;;;;;;;;;;;;;;;;;;;;
+
+plotLine:
+	ld HL, $D40000
+	ld (screenAdress), HL
+
+	ld HL, (x1)
+	ld BC, (x0)
+	or A,A
+	sbc HL, BC
+	jp nc, deltaXpositif
+	ld (dx), HL
+	ld DE, 1
+	ld (signdx), DE 	  ; dx négatif 
+	ld A, L
+	xor A, 255
+	ld E, A
+	ld A, H
+	xor A, 255
+	ld D, A
+	ld HL, 0
+	ld H, D
+	ld L, E
+	inc HL
+	jp endDeltaXpositif
+
+deltaXpositif:
+	ld DE, 0
+	ld (signdx), DE
+
+endDeltaXpositif:
+	ld (dx), HL
+
+
+	ld HL, (y1)
+	ld BC, (y0)
+	or A,A
+	sbc HL, BC
+	jp nc, deltaYpositif
+	ld (dy), HL
+	ld DE, 1
+	ld (signdy), DE
+	ld A, L
+	xor A, 255
+	ld E, A
+	ld A, H
+	xor A, 255
+	ld D, A
+	ld HL, 0
+	ld H, D
+	ld L, E
+	inc HL
+	jp endDeltaYpositif
+
+deltaYpositif:
+	ld DE, 0
+	ld (signdy), DE
+
+endDeltaYpositif:
+	ld (dy), HL
+
+	ld HL, (x1)
+	ld BC, (x0)
+	or A, A
+	sbc HL, BC
+	jp z, XaEgalXb
+	jp itsokay  	  ; test si x0 = x1 = y0 = y1
+
+XaEgalXb:
+	ld HL, (y1)
+	ld BC, (y0)
+	or A, A
+	sbc HL, BC
+	jp z, YaEgalYb
+	jp itsokay 
+
+YaEgalYb:
+	ld HL, (dy)
+	ld BC, (dx)
+	or A, A
+	sbc HL, BC
+	jp z, toutegal
+
+
+itsokay:
+
+	ld HL, (dy)
+	ld BC, (dx)
+	sbc HL, BC
+	jp nc, else_main  ; deltaY-deltaX < 0 ?
+	
+	ld HL, (x0)
+	ld BC, (x1)
+	sbc HL, BC        ; x0-x1 > 0 ?
+	jp c, elseX
+	call invertcoordinates
+	call plotLineLow  ; (x1, y1, x0, y0)
+	jp endPlotline
+
+elseX:
+	call plotLineLow  ; (x0, y0, x1, y1)
+	jp endPlotline
+
+
+else_main:
+	ld HL, (y0)
+	ld BC, (y1)
+	sbc HL, BC        ; y0-y1 > 0 ?	
+	jp c, elseY
+	call invertcoordinates
+	call plotLineHigh ; (x1, y1, x0, y0)
+	jp endPlotline
+
+elseY:
+	call plotLineHigh ; (x0, y0, x1, y1)
+	jp endPlotline
+
+toutegal:
+	ld A, (y0)
+	ld HL, (x0)
+	call drawpixel
+
+endPlotline:
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_calculDxDy_;;;;;;;;;;;;;;;;;;;;;
+
+calculDxDy:
+	ld HL, (x1)
+	ld BC, (x0)
+	or A,A
+	sbc HL, BC
+	jp nc, dX_positif
+	ld (dx), HL
+	ld DE, 1
+	ld (signdx), DE
+	jp endDXpositif
+
+dX_positif:
+	ld (dx), HL
+	ld DE, 0
+	ld (signdx), DE
+
+endDXpositif:
+
+
+	ld HL, (y1)
+	ld BC, (y0)
+	or A,A
+	sbc HL, BC
+	jp nc, dY_positif
+	ld (dy), HL
+	ld DE, 1
+	ld (signdy), DE
+	jp endDYpositif
+
+dY_positif:
+	ld (dy), HL
+	ld DE, 0
+	ld (signdy), DE
+
+endDYpositif:
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_plotLineLow_;;;;;;;;;;;;;;;;;;;;
+
+plotLineLow:
+
+	call calculDxDy
+
+	ld HL, 1
+	ld (yi), HL
+	ld HL, (signdy)
+	ld A, L
+	cp 1
+	jp nz, dyPositif
+	ld HL, -1
+	ld (yi), HL
+	ld HL, (dy)
+	ld A, L
+	xor A, 255
+	ld E, A
+	ld A, H
+	xor A, 255
+	ld D, A
+	ld HL, 0
+	ld H, D
+	ld L, E
+	inc HL
+	ld (dy), HL
+
+dyPositif:
+	ld HL, (dy)
+	add HL, HL
+	ld BC, (dx)
+	or A, A
+	sbc HL, BC
+	ld (DO), HL
+
+	ld HL, (x0)
+	ld (x), HL
+
+	add HL, HL ; x0
+	push HL
+	ld HL, (screenAdress)
+	pop BC
+	add HL, BC
+
+
+	ld BC, (y0)
+	ld (y), BC
+
+	ld A, C
+	cp 0
+	jr z, bypass
+
+	inc A
+	ld BC, 640
+screenloop:
+	add HL, BC
+	dec A      ; y0
+	cp 0
+	jr nz,screenloop
+
+bypass:	
+	ld (screenAdress), HL
+
+forXloop:
+	ld DE, (color)
+	ld HL, (screenAdress)
+	ld (hl),E
+	inc hl       ; = drawpixel
+	ld (hl),D
+
+	ld HL, (DO)
+	ld BC, 600
+	add HL, BC
+	jp nc, Dpositif
+
+	ld HL, (dy)
+	add HL, HL
+	ld BC, (DO)
+	add HL, BC
+	ld (DO), HL
+	jp endDpositif
+	
+
+Dpositif:
+	ld HL, (screenAdress)
+	ld BC, 640
+	ld A, (yi)
+	bit 7, A
+	jp nz, yinegatif
+	add HL, BC
+	jr endyinegatif
+
+yinegatif:
+	or A, A
+	sbc HL, BC
+
+endyinegatif:
+	ld (screenAdress), HL
+
+	ld HL, (dy)
+	ld BC, (dx)
+	sbc HL, BC
+	add HL, HL
+	ld BC, (DO)
+	add HL, BC
+	ld (DO), HL
+
+
+endDpositif:
+	ld BC, (screenAdress)
+	inc BC
+	inc BC
+	ld (screenAdress), BC
+	ld BC, (x)
+	inc BC
+	ld (x), BC
+	ld HL, (x1)
+	or A, A
+	sbc HL, BC
+	jp nz, forXloop
+
+	ret
+
+
+;;;;;;;;;;;;;;;;;;;;_plotLineHigh_;;;;;;;;;;;;;;;;;;;;
+
+plotLineHigh:
+
+	call calculDxDy
+
+	ld HL, 1
+	ld (xi), HL
+	ld HL, (signdx)
+	ld A, L
+	cp 1
+	jp nz, dxPositif
+	ld HL, -1
+	ld (xi), HL
+	ld HL, (dx)
+	ld A, L
+	xor A, 255
+	ld E, A
+	ld A, H
+	xor A, 255
+	ld D, A
+	ld HL, 0
+	ld H, D
+	ld L, E
+	inc HL
+	ld (dx), HL
+
+dxPositif:
+	ld HL, (dx)
+	add HL, HL
+	ld BC, (dy)
+	or A, A
+	sbc HL, BC
+	ld (DO), HL
+	ld HL, (x0)
+	ld (x), HL
+
+	add HL, HL ; x0
+	push HL
+	ld HL, (screenAdress)
+	pop BC
+	add HL, BC
+
+
+	ld BC, (y0)
+	ld (y), BC
+
+	ld A, C
+	cp 0
+	jr z, bypassB
+	inc A
+	ld BC, 640
+yscreenloop:
+	add HL, BC
+	dec A      ; y0
+	cp 0
+	jr nz,yscreenloop
+bypassB:
+	ld (screenAdress), HL
+
+
+forYloop:
+	ld DE, (color)
+	ld HL, (screenAdress)
+	ld (hl),E
+	inc hl       ; = drawpixel
+	ld (hl),D
+
+	ld HL, (DO)
+	ld BC, 600
+	add HL, BC
+	jp nc, DApositif
+	ld HL, (dx)
+	add HL, HL
+	ld BC, (DO)
+	add HL, BC
+	ld (DO), HL
+	jp endDApositif
+
+DApositif:
+	ld HL, (screenAdress)
+	ld BC, (xi)
+	add HL, BC
+	add HL, BC
+	ld (screenAdress), HL
+	ld HL, (dx)
+	ld BC, (dy)
+	sbc HL, BC
+	add HL, HL
+	ld BC, (DO)
+	add HL, BC
+	ld (DO), HL
+
+
+endDApositif:
+	ld BC, (screenAdress)
+	ld HL, 640
+	add HL, BC
+	ld (screenAdress), HL
+	ld BC, (y)
+	inc BC
+	ld (y), BC
+	ld HL, (y1)
+	or A, A
+	sbc HL, BC
+	jp nz, forYloop
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_drawVertices_;;;;;;;;;;;;;;;;;;;
+
+drawVertices:
+
+verticesLoop:
+	call rotationY
+	call troisDadeuxD
+
+	ld HL, (pointsix)
+	ld BC, 6
+	add HL, BC
+	ld (pointsix), HL
+
+	ld HL, (pointneuf)
+	ld BC, 9
+	add HL, BC
+	ld (pointneuf), HL
+
+	ld HL, (nbvertices)
+	dec HL
+	ld (nbvertices), HL
+	ld A, L
+	cp 0
+	jp nz, verticesLoop
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_cos_&_sin_;;;;;;;;;;;;;;;;;;;;;;
+
+cos:  ; sous forme de 2^8
+	.db 255 ; 0°
+	.db 252 ; 10°
+	.db 241 ; 20°
+	.db 221 ; 30°
+	.db 196 ; 40°
+	.db 164 ; 50°
+	.db 128 ; 60°
+	.db 88 ; 70°
+	.db 45 ; 80°
+	.db 0 ; 90°
+	.db 45 ; 100°   debut -
+	.db 88 ; 110°
+	.db 128 ; 120°
+	.db 164 ; 130°
+	.db 196 ; 140°
+	.db 221 ; 150°
+	.db 241 ; 160°
+	.db 252 ; 170°
+	.db 255 ; 180°
+	.db 252 ; 190°
+	.db 241 ; 200°
+	.db 221 ; 210°
+	.db 196 ; 220°
+	.db 164 ; 230°
+	.db 128 ; 240°
+	.db 88 ; 250°
+	.db 45 ; 260°   fin -
+	.db 0 ; 270°
+	.db 45 ; 280°
+	.db 88 ; 290°
+	.db 128 ; 300°
+	.db 164 ; 310°
+	.db 196 ; 320°
+	.db 221 ; 330°
+	.db 241 ; 340°
+	.db 252 ; 350°
+
+sin:
+	.db 0 ; 0°
+	.db 45 ; 10°
+	.db 88 ; 20°
+	.db 128 ; 30°
+	.db 164 ; 40°
+	.db 196 ; 50°
+	.db 221 ; 60°
+	.db 241 ; 70°
+	.db 252 ; 80°
+	.db 255 ; 90°
+	.db 252 ; 100°
+	.db 241 ; 110°
+	.db 221 ; 120°
+	.db 196 ; 130°
+	.db 164 ; 140°
+	.db 128 ; 150°
+	.db 88 ; 160°
+	.db 45 ; 170°
+	.db 0 ; 180°
+	.db 45 ; 190°   debut -
+	.db 88 ; 200°
+	.db 128 ; 210°
+	.db 164 ; 220°
+	.db 196 ; 230°
+	.db 221 ; 240°
+	.db 241 ; 250°
+	.db 252 ; 260°
+	.db 255 ; 270°
+	.db 252 ; 280°
+	.db 241 ; 290°
+	.db 221 ; 300°
+	.db 196 ; 310°
+	.db 164 ; 320°
+	.db 128 ; 330°
+	.db 88 ; 340°
+	.db 45 ; 350°  fin -
+
+;;;;;;;;;;;;;;;_coordonnées_du_cube_;;;;;;;;;;;;;;;;;
+
+cube: ; coordonnées sont dans (cube + "multiple de 3")
+	.dl 0, 20, 0
+	.dl -20, -20, -20
+	.dl 20, -20, -20         ; pyramide (5)
+	.dl -20, -20, 20
+	.dl 20, -20, 20
+
+	.dl -20, -20, -20
+	.dl 20, -20, -20
+	.dl 20, 20, -20
+	.dl -20, 20, -20         ; cube (8)
+	.dl -20, -20, 20 
+	.dl 20, -20, 20
+	.dl 20, 20, 20
+	.dl -20, 20, 20
+
+	.dl -10, -20, 20
+	.dl 10, -20, 20
+	.dl 20, -20, 0
+	.dl 10, -20, -20
+	.dl -10, -20, -20 
+	.dl -20, -20, 0         ; tube (12)
+	.dl -10, 20, 20
+	.dl 10, 20, 20
+	.dl 20, 20, 0
+	.dl 10, 20, -20
+	.dl -10, 20, -20
+	.dl -20, 20, 0
+
+	.dl -20, -20, 20 
+	.dl 0, -20, 20 
+	.dl 0, 0, 20 
+	.dl -20, 0, 20 
+	.dl 0, 0, 0
+	.dl 0, -20, 0 
+	.dl 20, -20, 0
+	.dl 20, -20, -20        ; 3 cubes (17)
+	.dl 20, 0, 0 
+	.dl 20, 0, -20
+	.dl 0, 0, -20 
+	.dl 0, 20, -20 
+	.dl 0, 20, 0 
+	.dl -20, 20, -20 
+	.dl -20, 20, 0 
+	.dl -20, 0, 0 
+	.dl -20, -20, -20 
+
+liens:
+	.db 0, 1
+	.db 0, 2
+	.db 0, 3
+	.db 0, 4         ; pyramide (8)
+	.db 1, 2
+	.db 2, 4
+	.db 4, 3
+	.db 3, 1
+
+	.db 0, 1
+	.db 1, 2
+	.db 2, 3
+	.db 3, 0
+	.db 4, 5
+	.db 5, 6         ; cube (12)
+	.db 6, 7
+	.db 7, 4
+	.db 0, 4
+	.db 1, 5
+	.db 2, 6
+	.db 3, 7
+
+	.db 0, 1
+	.db 1, 2
+	.db 2, 3
+	.db 3, 4
+	.db 4, 5
+	.db 5, 0         ; tube (18)
+	.db 6, 7
+	.db 7, 8
+	.db 8, 9
+	.db 9, 10
+	.db 10, 11
+	.db 11, 6
+	.db 0, 6
+	.db 1, 7
+	.db 2, 8
+	.db 3, 9
+	.db 4, 10
+	.db 5, 11
+
+
+	.db 0, 16
+	.db 0, 3
+	.db 0, 1
+	.db 1, 5
+	.db 1, 2
+	.db 2, 1
+	.db 2, 4
+	.db 2, 3
+	.db 3, 15
+	.db 4, 8
+	.db 4, 5
+	.db 4, 12
+	.db 4, 15        ; 3 cubes (28)
+	.db 6, 5
+	.db 6, 8
+	.db 6, 7
+	.db 7, 9
+	.db 7, 16
+	.db 8, 9
+	.db 9, 10
+	.db 10, 4
+	.db 10, 11
+	.db 11, 12
+	.db 11, 13
+	.db 12, 14
+	.db 13, 16
+	.db 13, 14
+	.db 14, 15
+
+cubeRota: ; coordonnées sont dans (cubeRota + "multiple de 3")
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0 
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0 
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0 
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+	.dl 0, 0, 0
+
+cubeDeuxD:
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+	.dl 0, 0
+
+;;;;;;;;;;;;;;;;;;;;_checkPositiveBC_;;;;;;;;;;;;;;;;;;;;
+
+checkPositiveBC:
+	ld A, B
+	bit 7, A
+	jp z, positiveBC
+	xor A, 255
+	ld B, A
+	ld A, C
+	dec A
+	xor A, 255
+	ld C, A
+	ld E, 1
+	ret
+
+positiveBC:
+	ld E, 0	
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_checkPositive_;;;;;;;;;;;;;;;;;;;;
+
+checkPositive:
+	bit 7, A
+	jp z, positive
+	dec A
+	xor A, 255
+	ld E, 1
+	ret
+
+positive:
+	ld E, 0	
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;_mult24bit_;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+mult24bit:
+	inc BC
+loopmult24bit:
+	add HL, DE
+	dec BC
+	ld A, C
+	cp 0
+	jp nz,loopmult24bit
+	ld A, B
+	cp 0
+	jp nz,loopmult24bit
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;_mult_;;;;;;;;;;;;;;;;;;;;;;;;;;
+mult:
+	add HL, BC
+	cp 0
+	dec A
+	jp nz,mult
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_drawpixel_;;;;;;;;;;;;;;;;;;;;;;;;
+
+drawpixel:
+	inc A
+	add HL, HL
+	ld BC, $D40000
+	add hl, BC
+	ld DE, (color)
+	ld BC, 640
+	
+drawpixelloop:
+	add HL, BC
+	dec A
+	cp 0
+	jr nz,drawpixelloop
+
+	ld (hl),E
+	inc hl
+	ld (hl),D
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_clearBandeau_;;;;;;;;;;;;;;;;;;;;;;;
+
+clearBandeau:
+	ld HL, $D40000
+	ld BC, 0
+	ld DE, (color)
+
+clearBandeauLoop:
+	ld HL, $D40000
+	add HL, BC
+	ld (HL),E
+	inc BC
+	ld HL, 19200
+	sbc HL, BC
+	jp nz, clearBandeauLoop
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_clearsquare_;;;;;;;;;;;;;;;;;;;;;;;;
+
+clearsquare:
+	ld DE, 65535
+	ld HL, $D40000
+	ld BC, 239
+
+clearsquareloopA:
+	ld A, 240
+
+clearsquareloopB:
+	ld (HL),DE
+	inc HL
+	inc HL
+	dec A
+	cp 0
+	jr nz,clearsquareloopB
+
+	push BC
+	ld BC, 160
+	add HL, BC
+	pop BC
+	ld A, C
+	dec C
+	cp 0
+	jr nz,clearsquareloopA
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_signCos_;;;;;;;;;;;;;;;;;;;;;;;;
+
+signCos:
+	ld HL, (angle)
+	ld A, L
+	cp 10
+	jp c, positifcos
+	cp 27
+	jp nc, positifcos
+	ld A, E
+	xor A, 1
+	ld E, A
+
+positifcos:
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_signSin_;;;;;;;;;;;;;;;;;;;;;;;;
+
+signSin:
+	ld HL, (angle)
+	ld A, L
+	cp 19
+	jp c, positifsin
+	cp 36
+	jp nc, positifsin
+	ld A, E
+	xor A, 1
+	ld E, A
+
+positifsin:
+	ret
+
+;;;;;;;;;;;;;;;;;;;;_3d_à_2d_;;;;;;;;;;;;;;;;;;;;;;;;
+
+troisDadeuxD:
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cubeRota
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	ld BC, 0       ; prendre z (relatif) et le mettre dans A
+	ld C, A
+	add HL, BC
+	ld BC, (HL) 
+	ld A, C
+	ld BC, 0
+	call checkPositive
+
+	ld C, A
+	ld HL, 0
+	ld A, 5
+multiplicationloop:
+	add HL, BC
+	dec A
+	cp 0
+	jp nz,multiplicationloop
+
+	bit 0, E
+	jp z, Zpositif
+	push HL
+	pop BC
+	ld HL, 600
+	sbc HL, BC
+	jr endZnegatif
+
+Zpositif:
+	ld BC, 600
+	add HL, BC
+endZnegatif:
+	
+	ld (varB), HL
+
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cuberota
+	inc HL
+	inc HL
+	inc HL
+	ld BC, 0       ; prendre y (relatif) et le mettre dans A
+	ld C, A
+	add HL, BC
+	ld BC, (HL) 
+	ld A, C
+	call checkpositive
+
+	cp 0
+	jp nz, Ypaszero
+	ld HL, 120
+	jp endYnegatif ; on saute la division si y = 0
+
+Ypaszero:
+	ld hl, 0
+	ld BC, 720
+	call mult
+
+	ld BC, (varB)
+	ld A, 0
+divisionloopA: ; à la fin, on aura un résultat stocké dans A
+	inc A
+	sbc HL, BC 
+	jp nc, divisionloopA
+
+; on vérifie que A est bien <119
+	cp 119
+	jp c, Aestoky
+	ld A, 120
+
+Aestoky:
+
+	ld HL, 120
+	bit 0, E
+	jp nz, Ypositif
+	ld DE, 0
+	ld E, A
+	sbc HL, DE
+	jr endYnegatif
+
+Ypositif:
+	ld DE, 0
+	ld E, A
+	add HL, DE
+
+endYnegatif:
+	ld (varY), HL
+
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cubeRota
+	ld BC, 0       ; prendre x (relatif) et le mettre dans A
+	ld C, A
+	add HL, BC
+	ld BC, (HL) 
+	ld A, C
+
+	call checkpositive
+
+	cp 0
+	jp z, positiveE ; on saute la division si x = 0
+
+
+	ld hl, 0
+	ld BC, 720
+	call mult
+
+	ld BC, (varB)
+
+	ld A, 0
+divisionloop: ; à la fin, on aura un résultat stocké dans A
+	inc A
+	sbc HL, BC 
+	jp nc, divisionloop
+
+; on vérifie que A est bien <119
+	cp 119
+	jp c, Aestokx
+	ld A, 120
+Aestokx:
+
+	bit 0, E
+	jp z, positiveE
+	ld B, A
+	ld A, 120
+	sub A, B
+	jp endE
+
+positiveE:
+	ld B, 120
+	add A, B
+
+endE:
+	ld HL, 0
+	ld L, A
+
+	ld DE, (varY)
+	ld A, E
+
+; A = "y"
+; HL = "x"
+
+
+; on s'occupe de sauvegarder x
+	push HL
+	ld DE, (pointsix) ; = point (de 6 en 6)
+	ld HL, cubeDeuxD
+	add HL, DE
+	pop BC
+	ld (HL), BC
+
+; on s'occupe de de sauvegarder y
+	inc HL
+	inc HL
+	inc HL
+	ld BC, 0
+	ld C, A
+	ld (HL), BC
+
+	ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;_rotationY_;;;;;;;;;;;;;;;;;;;;;;;;
+
+rotationY:
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cube
+	ld BC, (object)
+	add HL, BC
+	ld BC, 0       ; prendre x et le mettre dans BC
+	ld C, A
+	add HL, BC
+	ld BC, (HL) 
+	ld DE, 0
+	call checkPositiveBC
+	ld (varA), BC
+
+	call signCos
+
+	ld (signx), DE
+
+
+	ld BC, 0
+	ld C, L
+	ld HL, cos
+	add HL, BC
+	ld D, (HL) 	; cos(x)
+	ld BC, 0
+	ld C, D     ; BC contient cos(x)
+
+	ld DE, (varA)  ; x
+	ld HL, 0
+	call mult24bit
+	ld A, H
+	ld HL, 0
+	ld L, A
+	push HL 
+
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cube
+	ld BC, (object)
+	add HL, BC
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	ld BC, 0       ; prendre z et le mettre dans BC
+	ld C, A
+	add HL, BC
+	ld BC, (HL) 
+	call checkPositiveBC
+	ld (varA), BC
+
+	call signSin
+
+	ld (signz), DE
+
+	ld BC, 0
+	ld C, L
+	ld HL, sin
+	add HL, BC
+	ld D, (HL) 	; sin(x)
+	ld BC, 0
+	ld C, D     ; BC contient sin(x)
+
+	ld DE, (varA)
+	ld hl, 0
+	call mult24bit
+	ld B, H
+	ld HL, 0
+	ld L, B
+	push HL
+
+	ld DE, (signz)
+	ld HL, (signx)
+	ld A, E
+	and A, L
+	jp nz, moinsmoins
+	ld A, E
+	xor A, 1 
+	ld E, A
+	ld A, L
+	xor A, 1
+	ld L, A
+	ld A, E
+	and A, L
+	jp nz, plusplus
+	bit 0, E
+	jr z, plusmoins
+	pop BC
+	pop HL
+	ld A, L
+	xor A, 255
+	inc A
+	ld L, A
+	ld A, H
+	xor A, 255
+	ld H, A
+	sbc HL, BC
+	jr endXmoinsY
+
+plusmoins:
+	pop BC
+	pop HL
+	add HL, BC
+	jr endXmoinsY
+
+moinsmoins:
+	pop HL
+	pop BC
+	sbc HL, BC
+	jr endXmoinsY
+
+plusplus:
+	pop BC
+	pop HL
+	sbc HL, BC
+endXmoinsY:
+	
+	ld H, 0
+	ld (varC), HL
+
+
+; fin du calcul de X
+
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cube
+	ld BC, (object)
+	add HL, BC
+	ld BC, 0       ; prendre x et le mettre dans BC
+	ld C, A
+	add HL, BC
+	ld BC, (HL) 
+	call checkPositiveBC
+	ld (varA), BC
+
+	call signSin
+
+	ld (signx), DE
+
+	ld BC, 0      ; HL contient deja l'angle X
+	ld C, L
+	ld HL, sin
+	add HL, BC
+	ld D, (HL) 	; sin(x)
+	ld BC, 0
+	ld C, D
+
+	ld DE, (varA)
+	ld hl, 0
+	call mult24bit
+	ld B, H
+	ld HL, 0
+	ld L, B
+	push HL 
+
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cube
+	ld BC, (object)
+	add HL, BC
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	ld BC, 0       ; prendre z et le mettre dans BC
+	ld C, A
+	add HL, BC
+	ld BC, (HL) 
+	call checkPositiveBC
+	ld (varA), BC
+
+	call signCos
+
+	ld (signz), DE
+
+	ld BC, 0
+	ld C, L
+	ld HL, cos
+	add HL, BC
+	ld D, (HL) 	; cos(x)
+	ld BC, 0
+	ld C, D
+
+	ld DE, (varA)
+	ld hl, 0
+	call mult24bit
+	ld B, H
+	ld HL, 0
+	ld L, B
+	push HL
+
+
+	ld DE, (signz)
+	ld HL, (signx)
+	ld A, E
+	and A, L
+	jp nz, moinsmoinsZ
+	ld A, E
+	xor A, 1
+	ld E, A
+	ld A, L
+	xor A, 1
+	ld L, A
+	ld A, E
+	and A, L
+	jp nz, plusplusZ
+	bit 0, E
+	jr z, plusmoinsZ
+	pop HL
+	pop BC
+	sbc HL, BC
+	jr endXmoinsYZ
+
+plusmoinsZ:
+	pop BC
+	pop HL
+	sbc HL, BC
+	jr endXmoinsYZ
+
+moinsmoinsZ:
+	pop BC
+	pop HL
+	ld H, 0
+	ld A, L
+	xor A, 255
+	inc A
+	ld L, A
+	ld A, H
+	xor A, 255
+	ld H, A
+	sbc HL, BC
+	jr endXmoinsYZ
+
+plusplusZ:
+	pop BC
+	pop HL
+	add HL, BC
+endXmoinsYZ:
+
+	push HL
+	pop DE ; DE contient Z
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cubeRota
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	inc HL
+	ld BC, 0       ; prendre z et le mettre dans (cubeRota)
+	ld C, A
+	add HL, BC
+	ld (HL), DE 
+
+	ld HL, 0
+	ld HL, (varC)
+
+	push HL
+	pop DE ; DE contient x
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cubeRota
+	ld BC, 0       ; prendre x et le mettre dans (cubeRota)
+	ld C, A
+	add HL, BC
+	ld (HL), DE 
+	push HL
+
+	ld HL, (pointneuf) ; = point 
+	ld A, L
+	ld HL, cube
+	ld BC, (object)
+	add HL, BC
+	inc HL
+	inc HL
+	inc HL
+	ld BC, 0       ; prendre Y et le mettre dans DE
+	ld C, A
+	add HL, BC
+	ld DE, (HL)      ; DE contient Y
+
+	pop HL
+	inc HL
+	inc HL
+	inc HL 
+	ld (HL), DE   ; prendre y et le mettre dans (cubeRota)
+
+	ret
